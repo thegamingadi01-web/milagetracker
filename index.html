@@ -71,4 +71,93 @@
         function updateJob(id, field, val) {
             const job = currentJobs.find(x => x.id === id);
             if (field === 'milesToJob') {
-                job
+                job[field] = parseFloat(val) || 0;
+                calcLiveTotals();
+            } else {
+                job[field] = val;
+            }
+        }
+
+        function calcLiveTotals() {
+            const total = currentJobs.reduce((sum, j) => sum + j.milesToJob, 0);
+            document.getElementById('totalMiles').innerText = total;
+            document.getElementById('jobCount').innerText = currentJobs.length;
+        }
+
+        function renderJobs() {
+            const list = document.getElementById('jobList');
+            list.innerHTML = currentJobs.map(j => `
+                <div class="job-row bg-slate-50 p-4 rounded-xl border border-slate-200 relative">
+                    <button onclick="removeJob(${j.id})" class="absolute top-2 right-2 text-slate-300 hover:text-red-500 font-bold text-lg">×</button>
+                    
+                    <input type="text" placeholder="Client Name / Location" 
+                        oninput="updateJob(${j.id}, 'client', this.value)" 
+                        value="${j.client}" 
+                        class="w-10/12 mb-3 font-bold text-blue-700 placeholder:text-slate-300 border-none p-0 focus:ring-0">
+                    
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="bg-white p-2 rounded-lg shadow-sm border border-slate-100">
+                            <label class="block text-[8px] font-bold text-slate-400 uppercase">Arrival</label>
+                            <input type="time" value="${j.arrival}" onchange="updateJob(${j.id}, 'arrival', this.value)" class="text-[11px] w-full border-none p-0">
+                        </div>
+                        <div class="bg-white p-2 rounded-lg shadow-sm border border-slate-100">
+                            <label class="block text-[8px] font-bold text-slate-400 uppercase">Depart</label>
+                            <input type="time" value="${j.departure}" onchange="updateJob(${j.id}, 'departure', this.value)" class="text-[11px] w-full border-none p-0">
+                        </div>
+                        <div class="bg-blue-600 p-2 rounded-lg shadow-sm">
+                            <label class="block text-[8px] font-bold text-blue-200 uppercase">Miles</label>
+                            <input type="number" placeholder="0" oninput="updateJob(${j.id}, 'milesToJob', this.value)" value="${j.milesToJob || ''}" class="text-[11px] w-full border-none p-0 text-white font-bold placeholder:text-blue-300">
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            // Update the top counters
+            const totalM = currentJobs.reduce((sum, j) => sum + (parseFloat(j.milesToJob) || 0), 0);
+            document.getElementById('dispMiles').innerText = totalM.toFixed(1);
+            document.getElementById('dispJobs').innerText = currentJobs.length;
+        }
+
+        function saveDay() {
+            if (currentJobs.length === 0) return alert("Add at least one job first!");
+            
+            const totalM = currentJobs.reduce((sum, j) => sum + (parseFloat(j.milesToJob) || 0), 0);
+
+            logs.unshift({
+                date: new Date().toLocaleDateString('en-GB'),
+                ts: Date.now(),
+                totalMiles: totalM,
+                jobCount: currentJobs.length,
+                details: [...currentJobs]
+            });
+
+            localStorage.setItem('mileageLogs', JSON.stringify(logs));
+            currentJobs = [];
+            document.getElementById('emptyState').style.display = 'block';
+            renderJobs();
+            refreshHistory();
+        }
+
+        function refreshHistory() {
+            const h = document.getElementById('history');
+            h.innerHTML = logs.map(l => `
+                <div class="card border-l-4 border-emerald-500 py-3">
+                    <div class="flex justify-between items-center mb-2">
+                        <div class="font-black text-slate-800 text-sm">${l.date}</div>
+                        <div class="text-emerald-600 font-black text-sm">${l.totalMiles.toFixed(1)} MILES</div>
+                    </div>
+                    <div class="space-y-1 border-t pt-2">
+                        ${l.details.map(d => `
+                            <div class="flex justify-between text-[10px] text-slate-500 font-medium">
+                                <span class="truncate w-32">• ${d.client || 'Unnamed Job'}</span>
+                                <span>${d.milesToJob}mi | ${d.arrival}-${d.departure}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+        refreshHistory();
+    </script>
+</body>
+</html>
