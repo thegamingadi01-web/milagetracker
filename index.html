@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ServiceLog</title>
+    <title>ServiceLog Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background: #f8fafc; padding-bottom: 50px; }
-        .card { background: white; border-radius: 16px; padding: 16px; margin-bottom: 12px; shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        .btn-action { transition: transform 0.1s; }
-        .btn-action:active { transform: scale(0.95); }
+        body { background: #f8fafc; padding-bottom: 50px; -webkit-tap-highlight-color: transparent; }
+        .card { background: white; border-radius: 16px; padding: 15px; margin-bottom: 12px; shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
+        input { border-bottom: 2px solid #e2e8f0; background: transparent; }
+        .job-row { transition: all 0.2s; }
     </style>
 </head>
 <body class="p-4 font-sans text-slate-900">
@@ -17,119 +17,58 @@
     <div class="flex justify-between items-center mb-6">
         <div>
             <h1 class="text-2xl font-black text-blue-600 tracking-tight">ServiceLog</h1>
-            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Mileage & Job Tracker</p>
+            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Job & Mileage Tracker</p>
         </div>
-        <button onclick="saveDay()" class="bg-emerald-500 text-white px-6 py-2 rounded-full font-bold shadow-lg btn-action">FINISH DAY</button>
+        <button onclick="saveDay()" class="bg-emerald-500 text-white px-6 py-2 rounded-full font-bold shadow-lg active:scale-95">FINISH DAY</button>
     </div>
 
     <div class="grid grid-cols-2 gap-3 mb-6">
         <div class="bg-white p-4 rounded-2xl border-b-4 border-blue-500 shadow-sm text-center">
-            <div id="totalMiles" class="text-2xl font-black text-slate-800">0</div>
+            <div id="dispMiles" class="text-2xl font-black text-slate-800">0</div>
             <div class="text-[10px] uppercase font-bold text-slate-400">Total Miles</div>
         </div>
         <div class="bg-white p-4 rounded-2xl border-b-4 border-indigo-500 shadow-sm text-center">
-            <div id="jobCount" class="text-2xl font-black text-slate-800">0</div>
+            <div id="dispJobs" class="text-2xl font-black text-slate-800">0</div>
             <div class="text-[10px] uppercase font-bold text-slate-400">Jobs Done</div>
         </div>
     </div>
 
     <div class="card">
-        <h2 class="text-xs font-black text-slate-400 uppercase mb-3">Odometer</h2>
-        <div class="grid grid-cols-2 gap-4">
-            <div>
-                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Start Miles</label>
-                <input type="number" id="startMi" placeholder="0" class="w-full bg-slate-50 p-2 rounded-lg border-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div>
-                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1 text-right">End Miles</label>
-                <input type="number" id="endMi" placeholder="0" class="w-full bg-slate-50 p-2 rounded-lg border-none text-right focus:ring-2 focus:ring-blue-500">
-            </div>
-        </div>
-    </div>
-
-    <div class="card">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xs font-black text-slate-400 uppercase">Current Jobs</h2>
-            <button onclick="addJob()" class="text-blue-600 text-xs font-black uppercase">+ New Job</button>
+            <h2 class="text-xs font-black text-slate-400 uppercase tracking-tighter">Current Jobs & Travel</h2>
+            <button onclick="addJob()" class="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-tight">+ New Job</button>
         </div>
-        <div id="jobList" class="space-y-3"></div>
+        
+        <div id="jobList" class="space-y-4">
+            </div>
+
+        <div id="emptyState" class="text-center py-8 text-slate-300 italic text-sm">
+            No jobs added yet. Tap "+ New Job" to start.
+        </div>
     </div>
 
-    <div id="history" class="space-y-3 mt-6"></div>
+    <h2 class="text-xs font-black text-slate-400 uppercase mb-3 ml-1">Recent History</h2>
+    <div id="history" class="space-y-3"></div>
 
     <script>
         let logs = JSON.parse(localStorage.getItem('mileageLogs')) || [];
         let currentJobs = [];
 
         function addJob() {
+            document.getElementById('emptyState').style.display = 'none';
             const id = Date.now();
-            const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            currentJobs.push({ id, client: '', arrival: now, departure: '' });
+            const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
+            currentJobs.push({ id, client: '', arrival: now, departure: '', milesToJob: 0 });
             renderJobs();
         }
 
-        function renderJobs() {
-            const list = document.getElementById('jobList');
-            list.innerHTML = currentJobs.map(j => `
-                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <input type="text" placeholder="Client Name / Address" onchange="updateJob(${j.id}, 'client', this.value)" value="${j.client}" class="w-full mb-2 font-bold text-sm bg-transparent border-none">
-                    <div class="flex justify-between items-center gap-2">
-                        <div class="flex gap-1 items-center bg-white p-1 px-2 rounded-md shadow-sm">
-                            <span class="text-[9px] font-bold text-slate-400">IN</span>
-                            <input type="time" value="${j.arrival}" onchange="updateJob(${j.id}, 'arrival', this.value)" class="text-xs border-none p-0">
-                        </div>
-                        <div class="flex gap-1 items-center bg-white p-1 px-2 rounded-md shadow-sm">
-                            <span class="text-[9px] font-bold text-slate-400">OUT</span>
-                            <input type="time" value="${j.departure}" onchange="updateJob(${j.id}, 'departure', this.value)" class="text-xs border-none p-0">
-                        </div>
-                        <button onclick="removeJob(${id})" class="text-red-400 px-2 font-bold">×</button>
-                    </div>
-                </div>
-            `).join('');
-            document.getElementById('jobCount').innerText = currentJobs.length;
+        function removeJob(id) {
+            currentJobs = currentJobs.filter(j => j.id !== id);
+            if(currentJobs.length === 0) document.getElementById('emptyState').style.display = 'block';
+            renderJobs();
         }
 
         function updateJob(id, field, val) {
             const job = currentJobs.find(x => x.id === id);
-            job[field] = val;
-        }
-
-        function saveDay() {
-            const sM = parseInt(document.getElementById('startMi').value) || 0;
-            const eM = parseInt(document.getElementById('endMi').value) || 0;
-            if (eM <= sM) return alert("End miles must be higher than start miles");
-
-            logs.unshift({
-                date: new Date().toLocaleDateString('en-GB'),
-                miles: eM - sM,
-                jobs: currentJobs.length,
-                details: currentJobs
-            });
-
-            localStorage.setItem('mileageLogs', JSON.stringify(logs));
-            document.getElementById('startMi').value = eM;
-            document.getElementById('endMi').value = '';
-            currentJobs = [];
-            renderJobs();
-            refreshHistory();
-        }
-
-        function refreshHistory() {
-            const h = document.getElementById('history');
-            h.innerHTML = logs.map(l => `
-                <div class="card border-l-4 border-emerald-500">
-                    <div class="flex justify-between items-start mb-2">
-                        <div class="font-black text-slate-800">${l.date}</div>
-                        <div class="text-emerald-600 font-black text-lg">${l.miles} <span class="text-[10px]">MILES</span></div>
-                    </div>
-                    <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">${l.jobs} Job(s) Completed</div>
-                    <div class="space-y-1">
-                        ${l.details.map(d => `<div class="text-[11px] text-slate-600 flex justify-between"><span>• ${d.client}</span><span>${d.arrival}-${d.departure}</span></div>`).join('')}
-                    </div>
-                </div>
-            `).join('');
-        }
-        refreshHistory();
-    </script>
-</body>
-</html>
+            if (field === 'milesToJob') {
+                job
