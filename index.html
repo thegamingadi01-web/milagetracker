@@ -7,9 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background: #f8fafc; padding-bottom: 50px; -webkit-tap-highlight-color: transparent; }
-        .card { background: white; border-radius: 16px; padding: 15px; margin-bottom: 12px; shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
-        input { border-bottom: 2px solid #e2e8f0; background: transparent; }
-        .job-row { transition: all 0.2s; }
+        .card { background: white; border-radius: 16px; padding: 15px; margin-bottom: 12px; border: 1px solid #e2e8f0; }
+        input { border-bottom: 1px solid #e2e8f0; background: transparent; }
+        .job-card { border-left: 4px solid #3b82f6; }
     </style>
 </head>
 <body class="p-4 font-sans text-slate-900">
@@ -17,7 +17,7 @@
     <div class="flex justify-between items-center mb-6">
         <div>
             <h1 class="text-2xl font-black text-blue-600 tracking-tight">ServiceLog</h1>
-            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Job & Mileage Tracker</p>
+            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Auto-Mileage Tracker</p>
         </div>
         <button onclick="saveDay()" class="bg-emerald-500 text-white px-6 py-2 rounded-full font-bold shadow-lg active:scale-95">FINISH DAY</button>
     </div>
@@ -33,32 +33,38 @@
         </div>
     </div>
 
-    <div class="card">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xs font-black text-slate-400 uppercase tracking-tighter">Current Jobs & Travel</h2>
-            <button onclick="addJob()" class="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-tight">+ New Job</button>
-        </div>
-        
-        <div id="jobList" class="space-y-4">
-            </div>
-
-        <div id="emptyState" class="text-center py-8 text-slate-300 italic text-sm">
-            No jobs added yet. Tap "+ New Job" to start.
+    <div class="card bg-blue-50 border-none mb-4">
+        <div class="flex justify-between items-center">
+            <h2 class="text-xs font-black text-blue-800 uppercase">Active Log</h2>
+            <button onclick="addJob()" class="bg-blue-600 text-white px-4 py-1 rounded-lg text-xs font-black uppercase">+ Add Job</button>
         </div>
     </div>
 
-    <h2 class="text-xs font-black text-slate-400 uppercase mb-3 ml-1">Recent History</h2>
+    <div id="jobList" class="space-y-4"></div>
+
+    <div id="emptyState" class="text-center py-10 text-slate-300 italic text-sm">
+        No jobs logged today.
+    </div>
+
+    <h2 class="text-xs font-black text-slate-400 uppercase mt-8 mb-3 ml-1 border-t pt-4">History</h2>
     <div id="history" class="space-y-3"></div>
 
     <script>
-        let logs = JSON.parse(localStorage.getItem('mileageLogs')) || [];
+        let logs = JSON.parse(localStorage.getItem('serviceLogs')) || [];
         let currentJobs = [];
 
         function addJob() {
             document.getElementById('emptyState').style.display = 'none';
             const id = Date.now();
             const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
-            currentJobs.push({ id, client: '', arrival: now, departure: '', milesToJob: 0 });
+            
+            // Auto-fill Start Miles from previous job's End Miles
+            let lastEnd = 0;
+            if (currentJobs.length > 0) {
+                lastEnd = currentJobs[currentJobs.length - 1].endM;
+            }
+
+            currentJobs.push({ id, client: '', arrival: now, departure: '', startM: lastEnd, endM: 0, total: 0 });
             renderJobs();
         }
 
@@ -70,58 +76,75 @@
 
         function updateJob(id, field, val) {
             const job = currentJobs.find(x => x.id === id);
-            if (field === 'milesToJob') {
-                job[field] = parseFloat(val) || 0;
-                calcLiveTotals();
+            job[field] = (field === 'startM' || field === 'endM') ? (parseFloat(val) || 0) : val;
+            
+            // Calculate leg total
+            if (job.endM > job.startM) {
+                job.total = job.endM - job.startM;
             } else {
-                job[field] = val;
+                job.total = 0;
             }
+            renderTotals();
         }
 
-        function calcLiveTotals() {
-            const total = currentJobs.reduce((sum, j) => sum + j.milesToJob, 0);
-            document.getElementById('totalMiles').innerText = total;
-            document.getElementById('jobCount').innerText = currentJobs.length;
+        function renderTotals() {
+            const totalM = currentJobs.reduce((sum, j) => sum + j.total, 0);
+            document.getElementById('dispMiles').innerText = totalM.toFixed(1);
+            document.getElementById('dispJobs').innerText = currentJobs.length;
+            
+            // Update individual leg displays without a full re-render
+            currentJobs.forEach(j => {
+                const el = document.getElementById(`calc-${j.id}`);
+                if (el) el.innerText = j.total.toFixed(1) + ' mi';
+            });
         }
 
         function renderJobs() {
             const list = document.getElementById('jobList');
             list.innerHTML = currentJobs.map(j => `
-                <div class="job-row bg-slate-50 p-4 rounded-xl border border-slate-200 relative">
-                    <button onclick="removeJob(${j.id})" class="absolute top-2 right-2 text-slate-300 hover:text-red-500 font-bold text-lg">×</button>
+                <div class="card job-card relative">
+                    <button onclick="removeJob(${j.id})" class="absolute top-2 right-2 text-slate-300 hover:text-red-500 font-bold">×</button>
                     
-                    <input type="text" placeholder="Client Name / Location" 
+                    <input type="text" placeholder="Client Name" 
                         oninput="updateJob(${j.id}, 'client', this.value)" 
                         value="${j.client}" 
-                        class="w-10/12 mb-3 font-bold text-blue-700 placeholder:text-slate-300 border-none p-0 focus:ring-0">
+                        class="w-10/12 mb-4 font-bold text-lg text-slate-800 border-none p-0 focus:ring-0">
                     
-                    <div class="grid grid-cols-3 gap-2">
-                        <div class="bg-white p-2 rounded-lg shadow-sm border border-slate-100">
-                            <label class="block text-[8px] font-bold text-slate-400 uppercase">Arrival</label>
-                            <input type="time" value="${j.arrival}" onchange="updateJob(${j.id}, 'arrival', this.value)" class="text-[11px] w-full border-none p-0">
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-slate-50 p-2 rounded-lg">
+                            <label class="block text-[9px] font-bold text-slate-400 uppercase">Arrival Time</label>
+                            <input type="time" value="${j.arrival}" onchange="updateJob(${j.id}, 'arrival', this.value)" class="text-xs w-full border-none p-0">
                         </div>
-                        <div class="bg-white p-2 rounded-lg shadow-sm border border-slate-100">
-                            <label class="block text-[8px] font-bold text-slate-400 uppercase">Depart</label>
-                            <input type="time" value="${j.departure}" onchange="updateJob(${j.id}, 'departure', this.value)" class="text-[11px] w-full border-none p-0">
+                        <div class="bg-slate-50 p-2 rounded-lg">
+                            <label class="block text-[9px] font-bold text-slate-400 uppercase">Depart Time</label>
+                            <input type="time" value="${j.departure}" onchange="updateJob(${j.id}, 'departure', this.value)" class="text-xs w-full border-none p-0">
                         </div>
-                        <div class="bg-blue-600 p-2 rounded-lg shadow-sm">
-                            <label class="block text-[8px] font-bold text-blue-200 uppercase">Miles</label>
-                            <input type="number" placeholder="0" oninput="updateJob(${j.id}, 'milesToJob', this.value)" value="${j.milesToJob || ''}" class="text-[11px] w-full border-none p-0 text-white font-bold placeholder:text-blue-300">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 border-t pt-4">
+                        <div>
+                            <label class="block text-[9px] font-bold text-blue-500 uppercase">Start Odometer</label>
+                            <input type="number" placeholder="0" oninput="updateJob(${j.id}, 'startM', this.value)" value="${j.startM || ''}" class="text-sm font-bold w-full border-none p-0">
                         </div>
+                        <div>
+                            <label class="block text-[9px] font-bold text-blue-500 uppercase">End Odometer</label>
+                            <input type="number" placeholder="0" oninput="updateJob(${j.id}, 'endM', this.value)" value="${j.endM || ''}" class="text-sm font-bold w-full border-none p-0 text-right">
+                        </div>
+                    </div>
+                    
+                    <div class="mt-2 text-right">
+                        <span id="calc-${j.id}" class="text-[10px] font-black bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                            ${j.total.toFixed(1)} mi
+                        </span>
                     </div>
                 </div>
             `).join('');
-            
-            // Update the top counters
-            const totalM = currentJobs.reduce((sum, j) => sum + (parseFloat(j.milesToJob) || 0), 0);
-            document.getElementById('dispMiles').innerText = totalM.toFixed(1);
-            document.getElementById('dispJobs').innerText = currentJobs.length;
+            renderTotals();
         }
 
         function saveDay() {
-            if (currentJobs.length === 0) return alert("Add at least one job first!");
-            
-            const totalM = currentJobs.reduce((sum, j) => sum + (parseFloat(j.milesToJob) || 0), 0);
+            if (currentJobs.length === 0) return alert("No jobs to save!");
+            const totalM = currentJobs.reduce((sum, j) => sum + j.total, 0);
 
             logs.unshift({
                 date: new Date().toLocaleDateString('en-GB'),
@@ -131,7 +154,7 @@
                 details: [...currentJobs]
             });
 
-            localStorage.setItem('mileageLogs', JSON.stringify(logs));
+            localStorage.setItem('serviceLogs', JSON.stringify(logs));
             currentJobs = [];
             document.getElementById('emptyState').style.display = 'block';
             renderJobs();
@@ -141,16 +164,16 @@
         function refreshHistory() {
             const h = document.getElementById('history');
             h.innerHTML = logs.map(l => `
-                <div class="card border-l-4 border-emerald-500 py-3">
+                <div class="card border-l-4 border-emerald-500">
                     <div class="flex justify-between items-center mb-2">
-                        <div class="font-black text-slate-800 text-sm">${l.date}</div>
-                        <div class="text-emerald-600 font-black text-sm">${l.totalMiles.toFixed(1)} MILES</div>
+                        <div class="font-bold text-slate-800">${l.date}</div>
+                        <div class="text-emerald-600 font-black">${l.totalMiles.toFixed(1)} MILES</div>
                     </div>
-                    <div class="space-y-1 border-t pt-2">
+                    <div class="space-y-1">
                         ${l.details.map(d => `
-                            <div class="flex justify-between text-[10px] text-slate-500 font-medium">
-                                <span class="truncate w-32">• ${d.client || 'Unnamed Job'}</span>
-                                <span>${d.milesToJob}mi | ${d.arrival}-${d.departure}</span>
+                            <div class="flex justify-between text-[10px] text-slate-500">
+                                <span>• ${d.client || 'Client'}</span>
+                                <span>${d.total.toFixed(1)} mi (${d.arrival}-${d.departure})</span>
                             </div>
                         `).join('')}
                     </div>
